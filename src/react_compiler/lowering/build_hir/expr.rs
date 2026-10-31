@@ -1271,10 +1271,18 @@ fn lower_template(
 
     let mut subexprs: HirVec<Place> = AstAlloc::vec_with_capacity(parts.len());
     let mut quasis: HirVec<TemplateQuasi> = AstAlloc::vec_with_capacity(parts.len() + 1);
-    quasis.push(convert_template_contents(&tmpl.head, loc)?);
+    quasis.push(convert_template_contents(
+        &tmpl.head,
+        builder.host().arena(),
+        loc,
+    )?);
     for part in parts {
         subexprs.push(lower_expression_to_temporary(builder, &part.value)?);
-        quasis.push(convert_template_contents(&part.tail, loc)?);
+        quasis.push(convert_template_contents(
+            &part.tail,
+            builder.host().arena(),
+            loc,
+        )?);
     }
     Ok(InstructionValue::TemplateLiteral {
         subexprs,
@@ -1285,10 +1293,13 @@ fn lower_template(
 
 fn convert_template_contents(
     c: &E::TemplateContents,
+    arena: &bun_alloc::Arena,
     loc: Option<SourceLocation>,
 ) -> Result<TemplateQuasi, CompilerError> {
     match c {
         E::TemplateContents::Cooked(s) => {
+            // Constant folding can leave the cooked text in a string rope.
+            let s = s.flattened(arena);
             let cooked = if s.is_utf16 {
                 arena_utf8_from_utf16(s.slice16(), loc)?
             } else {

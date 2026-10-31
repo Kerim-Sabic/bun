@@ -11,6 +11,48 @@ import { itBundled, type BundlerTestInput } from "../expectBundled";
 // (`add_memo_cache_import` / `get_react_compiler_runtime_module`).
 
 describe("bundler", () => {
+  for (const backend of ["cli", "api"] as const) {
+    for (const minifySyntax of [false, true]) {
+      itBundled(`react-compiler/FoldedTemplateParts-${backend}-${minifySyntax}`, {
+        files: {
+          "/entry.jsx": /* jsx */ `
+            export function Box({ size }) {
+              return <svg viewBox={\`\${0} \${0} \${size} \${size}\`} />;
+            }
+            export function Label({ value }) {
+              return <span title={\`\${value} of \${1 + 1} done\`} />;
+            }
+            export function Middle({ value }) {
+              return <span title={\`\${value} \${1 + 1} \${value}\`} />;
+            }
+            export function Unicode({ value }) {
+              return <span title={\`©\${0} \${value} 🎉\`} />;
+            }
+            console.log(JSON.stringify([
+              Box({ size: 24 }).props.viewBox,
+              Label({ value: 1 }).props.title,
+              Middle({ value: "x" }).props.title,
+              Unicode({ value: "ok" }).props.title,
+            ]));
+          `,
+          "/node_modules/react/package.json": `{"name":"react","main":"./index.js"}`,
+          "/node_modules/react/index.js": `exports.createElement = (type, props) => ({ type, props });`,
+          "/node_modules/react/jsx-runtime.js": `exports.jsx = (type, props) => ({ type, props }); exports.jsxs = exports.jsx;`,
+          "/node_modules/react/jsx-dev-runtime.js": `exports.jsxDEV = (type, props) => ({ type, props });`,
+          "/node_modules/react/compiler-runtime.js": `exports.c = n => new Array(n).fill(Symbol.for("react.memo_cache_sentinel"));`,
+        },
+        reactCompiler: true,
+        target: "browser",
+        backend,
+        minifySyntax,
+        onAfterBundle(api) {
+          expect(api.readFile("/out.js")).toContain("react.memo_cache_sentinel");
+        },
+        run: { stdout: '["0 0 24 24","1 of 2 done","x 2 x","©0 ok 🎉"]' },
+      });
+    }
+  }
+
   itBundled("react-compiler/SimpleComponent", {
     files: {
       "/entry.jsx": /* jsx */ `
